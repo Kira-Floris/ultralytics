@@ -426,9 +426,9 @@ class SqueezeAndExcitationResidualBlock(nn.Module):
     "Squeeze and Excitation Residual Block"
     def __init__(self, c1, c2, stride=1, kernel_size=3, padding=1, bias=False, reduction=16):
         super(SqueezeAndExcitationResidualBlock, self).__init__()
-        self.conv1 = nn.Conv2d(c1, c2, k=kernel_size, s=stride, p=padding, bias=bias)
+        self.conv1 = nn.Conv2d(c1, c2, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)
         self.bn1 = nn.BatchNorm2d(c2)
-        self.conv2 = nn.Conv2d(c2, c2, k=kernel_size, s=1, p=padding,bias=bias)
+        self.conv2 = nn.Conv2d(c2, c2, kernel_size=kernel_size, stride=1, padding=padding,bias=bias)
         self.bn2 = nn.BatchNorm2d(c2)
         self.se = SqueezeAndExcitationBlock(c2, reduction)
         self.relu = nn.ReLU(inplace=True)
