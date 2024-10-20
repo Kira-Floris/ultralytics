@@ -433,7 +433,7 @@ class SqueezeAndExcitationResidualBlock(nn.Module):
         self.downsample = None
         if stride != 1 or c1!=c2:
             self.downsample = nn.Sequential(
-                Conv(c1,c2,k=1,s=stride)
+                Conv(c1,c2,k=1,s=stride, p=0, act=False)
             )
     
     def forward(self, x):
