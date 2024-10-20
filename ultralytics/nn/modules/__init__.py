@@ -55,6 +55,7 @@ from .block import (
     RepNCSPELAN4,
     RepVGGDW,
     ResNetLayer,
+    SqueezeAndExcitedResidualLayer,
     SCDown,
 )
 from .conv import (
@@ -138,6 +139,7 @@ __all__ = (
     "MSDeformAttn",
     "MLP",
     "ResNetLayer",
+    "SqueezeAndExcitedResidualLayer",
     "OBB",
     "WorldDetect",
     "v10Detect",

@@ -33,6 +33,7 @@ __all__ = (
     "Proto",
     "RepC3",
     "ResNetLayer",
+    "SqueezeAndExcitedResidualLayer",
     "RepNCSPELAN4",
     "ELAN1",
     "ADown",
@@ -400,6 +401,69 @@ class ResNetLayer(nn.Module):
         else:
             blocks = [ResNetBlock(c1, c2, s, e=e)]
             blocks.extend([ResNetBlock(e * c2, c2, 1, e=e) for _ in range(n - 1)])
+            self.layer = nn.Sequential(*blocks)
+
+    def forward(self, x):
+        """Forward pass through the ResNet layer."""
+        return self.layer(x)
+
+class SqueezeAndExcitationBlock(nn.Module):
+    "Squeeze and Excitation block with fully connected layers"
+    def __init__(self, c1, reduction=16):
+        super(SqueezeAndExcitationBlock, self).__init__()
+        self.fc1 = nn.Linear(c1, c1//reduction)
+        self.fc2 = nn.Linear(c1//reduction, c1)
+    
+    def forward(self, x):
+        batch_size, num_channels, _, _ = x.size()
+        squeeze = F.adaptive_avg_pool2d(x,1).view(batch_size, num_channels)
+        excitation = F.relu(self.fc1(squeeze))
+        excitation = torch.sigmoid(self.fc2(excitation)).view(batch_size, num_channels, 1, 1)
+        x = x * excitation
+        return x
+
+class SqueezeAndExcitationResidualBlock(nn.Module):
+    "Squeeze and Excitation Residual Block"
+    def __init__(self, c1, c2, stride=1, kernel_size=3, padding=1, bias=False, reduction=16):
+        super(SqueezeAndExcitationResidualBlock, self).__init__()
+        self.conv1 = Conv(c1, c2, k=kernel_size, s=stride, p=padding, act=True)
+        self.conv2 = Conv(c2, c2, k=kernel_size, s=1, p=padding, act=True)
+        self.se = SqueezeAndExcitationBlock(c2, reduction)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = None
+        if stride != 1 or c1!=c2:
+            self.downsample = nn.Sequential(
+                Conv(c1,c2,k=1,s=stride)
+            )
+    
+    def forward(self, x):
+        residual = x
+        out = self.se(self.conv2(self.conv1(x)))
+        if self.downsample is not None:
+            residual = self.downsample(x)
+        out += residual
+        out = self.relu(out)
+        return out
+
+class SqueezeAndExcitedResidualLayer(nn.Module):
+    """ResNet layer with multiple Squeeze and Excitation Residual Blocks."""
+
+    def __init__(self, c1, c2, s=1, is_first=False, n=1, e=4, reduction=16):
+        """Initializes the ResNetLayer with Squeeze and Excitation Residual Blocks."""
+        super().__init__()
+        self.is_first = is_first
+
+        if self.is_first:
+            # Initial layer with a larger convolution and max pooling for downsampling
+            self.layer = nn.Sequential(
+                Conv(c1, c2, k=7, s=2, p=3, act=True), 
+                nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+            )
+        else:
+            # First block with stride 's' for downsampling, followed by others with stride 1
+            blocks = [SqueezeAndExcitationResidualBlock(c1, c2, stride=s, reduction=reduction)]
+            # Add additional blocks with stride = 1
+            blocks.extend([SqueezeAndExcitationResidualBlock(c2, c2, stride=1, reduction=reduction) for _ in range(n - 1)])
             self.layer = nn.Sequential(*blocks)
 
     def forward(self, x):
