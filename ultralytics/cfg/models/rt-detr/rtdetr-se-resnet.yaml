@@ -11,7 +11,7 @@ backbone:
   # [from, repeats, module, args]
   - [-1, 1, SqueezeAndExcitedResidualLayer, [3, 64, 1, True, 1]] # 0
   - [-1, 1, SqueezeAndExcitedResidualLayer, [64, 64, 1, False, 3]] # 1
-  - [-1, 1, Conv, [256, 1, 1, None, 1, 1, False]]
+  - [-1, 1, SqueezeAndExcitedResidualLayer, [128, 64, 1, False, 3]] 
   - [-1, 1, SqueezeAndExcitedResidualLayer, [256, 128, 2, False, 4]] # 2
   - [-1, 1, SqueezeAndExcitedResidualLayer, [512, 256, 2, False, 6]] # 3
   - [-1, 1, SqueezeAndExcitedResidualLayer, [1024, 512, 2, False, 3]] # 4
