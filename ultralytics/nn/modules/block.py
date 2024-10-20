@@ -409,63 +409,59 @@ class ResNetLayer(nn.Module):
 
 class SqueezeAndExcitationBlock(nn.Module):
     "Squeeze and Excitation block with fully connected layers"
-    def __init__(self, c1, reduction=16):
-        super(SqueezeAndExcitationBlock, self).__init__()
-        self.fc1 = nn.Linear(c1, c1//reduction)
-        self.fc2 = nn.Linear(c1//reduction, c1)
-    
+    def __init__(self, channels, reduction=16):
+        """Initialize SE Block with given parameters."""
+        super().__init__()
+        self.fc1 = nn.Linear(channels, channels // reduction, bias=True)
+        self.fc2 = nn.Linear(channels // reduction, channels, bias=True)
+
     def forward(self, x):
-        batch_size, num_channels, _, _ = x.size()
-        squeeze = F.adaptive_avg_pool2d(x,1).view(batch_size, num_channels)
-        excitation = F.relu(self.fc1(squeeze))
-        excitation = torch.sigmoid(self.fc2(excitation)).view(batch_size, num_channels, 1, 1)
-        x = x * excitation
-        return x
+        """Forward pass through the SE block."""
+        batch_size, channels, _, _ = x.size()
+        # Squeeze: Global Average Pooling
+        y = F.adaptive_avg_pool2d(x, (1, 1)).view(batch_size, channels)
+        # Excitation: Fully connected layers
+        y = F.relu(self.fc1(y))
+        y = torch.sigmoid(self.fc2(y)).view(batch_size, channels, 1, 1)
+        return x * y.expand_as(x)  # Scale input by learned weights
 
 class SqueezeAndExcitationResidualBlock(nn.Module):
     "Squeeze and Excitation Residual Block"
-    def __init__(self, c1, c2, stride=1, kernel_size=3, padding=1, bias=False, reduction=16):
-        super(SqueezeAndExcitationResidualBlock, self).__init__()
-        self.conv1 = nn.Conv2d(c1, c2, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)
-        self.bn1 = nn.BatchNorm2d(c2)
-        self.conv2 = nn.Conv2d(c2, c2, kernel_size=kernel_size, stride=1, padding=padding,bias=bias)
-        self.bn2 = nn.BatchNorm2d(c2)
-        self.se = SqueezeAndExcitationBlock(c2, reduction)
-        self.relu = nn.ReLU(inplace=True)
-        self.downsample = None
-        if stride != 1 or c1!=c2:
-            self.downsample = nn.Sequential(
-                Conv(c1,c2,k=1,s=stride, p=0, act=False)
-            )
-    
+    def __init__(self, c1, c2, s=1, e=4):
+        """Initialize convolution with given parameters."""
+        super().__init__()
+        c3 = e * c2
+        self.cv1 = Conv(c1, c2, k=1, s=1, act=True)
+        self.cv2 = Conv(c2, c2, k=3, s=s, p=1, act=True)
+        self.cv3 = Conv(c2, c3, k=1, act=False)
+        
+        # Adding SE Block
+        self.se_block = SqueezeAndExcitationBlock(c3)
+
+        self.shortcut = nn.Sequential(Conv(c1, c3, k=1, s=s, act=False)) if s != 1 or c1 != c3 else nn.Identity()
+
     def forward(self, x):
-        residual = x
-        out = self.se(self.bn2(self.conv2(self.relu(self.bn1((self.conv1(x)))))))
-        if self.downsample is not None:
-            residual = self.downsample(x)
-        out += residual
-        out = self.relu(out)
-        return out
+        """Forward pass through the SE ResNet block."""
+        out = self.cv3(self.cv2(self.cv1(x)))  # Pass through convolutions
+        out = self.se_block(out)                # Apply Squeeze-and-Excitation
+        return F.relu(out + self.shortcut(x))  # Add shortcut and apply ReLU
 
 class SqueezeAndExcitedResidualLayer(nn.Module):
     """ResNet layer with multiple Squeeze and Excitation Residual Blocks."""
 
-    def __init__(self, c1, c2, s=1, is_first=False, n=1, e=4, reduction=16):
-        """Initializes the ResNetLayer with Squeeze and Excitation Residual Blocks."""
+    def __init__(self, c1, c2, s=1, is_first=False, n=1, e=4):
+        """Initializes the ResNetLayer given arguments."""
         super().__init__()
         self.is_first = is_first
 
         if self.is_first:
-            # Initial layer with a larger convolution and max pooling for downsampling
             self.layer = nn.Sequential(
                 Conv(c1, c2, k=7, s=2, p=3, act=True), 
                 nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
             )
         else:
-            # First block with stride 's' for downsampling, followed by others with stride 1
-            blocks = [SqueezeAndExcitationResidualBlock(c1, c2, stride=s, reduction=reduction)]
-            # Add additional blocks with stride = 1
-            blocks.extend([SqueezeAndExcitationResidualBlock(c2, c2, stride=1, reduction=reduction) for _ in range(n - 1)])
+            blocks = [SqueezeAndExcitationResidualBlock(c1, c2, s, e=e)]
+            blocks.extend([SqueezeAndExcitationResidualBlock(e * c2, c2, 1, e=e) for _ in range(n - 1)])
             self.layer = nn.Sequential(*blocks)
 
     def forward(self, x):
