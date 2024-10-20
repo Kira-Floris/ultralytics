@@ -426,8 +426,10 @@ class SqueezeAndExcitationResidualBlock(nn.Module):
     "Squeeze and Excitation Residual Block"
     def __init__(self, c1, c2, stride=1, kernel_size=3, padding=1, bias=False, reduction=16):
         super(SqueezeAndExcitationResidualBlock, self).__init__()
-        self.conv1 = Conv(c1, c2, k=kernel_size, s=stride, p=padding, act=True)
-        self.conv2 = Conv(c2, c2, k=kernel_size, s=1, p=padding, act=True)
+        self.conv1 = nn.Conv2d(c1, c2, k=kernel_size, s=stride, p=padding, bias=bias)
+        self.bn1 = nn.BatchNorm2d(c2)
+        self.conv2 = nn.Conv2d(c2, c2, k=kernel_size, s=1, p=padding,bias=bias)
+        self.bn2 = nn.BatchNorm2d(c2)
         self.se = SqueezeAndExcitationBlock(c2, reduction)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = None
@@ -438,7 +440,7 @@ class SqueezeAndExcitationResidualBlock(nn.Module):
     
     def forward(self, x):
         residual = x
-        out = self.se(self.conv2(self.conv1(x)))
+        out = self.se(self.bn2(self.conv2(self.relu(self.bn1((self.conv1(x)))))))
         if self.downsample is not None:
             residual = self.downsample(x)
         out += residual
