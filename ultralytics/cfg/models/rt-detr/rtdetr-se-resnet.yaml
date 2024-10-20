@@ -14,10 +14,11 @@ backbone:
   - [-1, 1, SqueezeAndExcitedResidualLayer, [64, 128, 2, False, 4]] # 2
   - [-1, 1, SqueezeAndExcitedResidualLayer, [128, 256, 2, False, 6]] # 3
   - [-1, 1, SqueezeAndExcitedResidualLayer, [256, 512, 2, False, 3]] # 4
+  - [-1, 1, SqueezeAndExcitedResidualLayer, [512, 1024, 2, False, 3]] # 4
 
 head:
   - [-1, 1, Conv, [256, 1, 1, None, 1, 1, False]] # 5
-  - [-1, 1, AIFI, [512, 8]]
+  - [-1, 1, AIFI, [1024, 8]]
   - [-1, 1, Conv, [256, 1, 1]] # 7
 
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
